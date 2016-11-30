@@ -32,6 +32,10 @@
 using namespace octomap;
 using octomap_msgs::Octomap;
 
+#define sqrt2pi 2.506628274631
+#define P_occ_min 0.0000000001
+#define P_occ_max 0.9999999999
+
 bool is_equal (double a, double b, double epsilon = 1.0e-7)
 {
     return std::abs(a - b) < epsilon;
@@ -353,7 +357,14 @@ void OctomapServer::insertCloudCallback(const sensor_msgs::PointCloud2::ConstPtr
   publishAll(cloud->header.stamp);
 }
 
-void OctomapServer::insertScan(const tf::Point& sensorOriginTf, const PCLPointCloud& ground, const PCLPointCloud& nonground){
+void OctomapServer::insertScan(const tf::Point& sensorOriginTf, const PCLPointCloud& ground, const
+PCLPointCloud& nonground){
+  std::vector<double> map_est;
+  std::vector<double> ray_depths;
+  std::vector<double> map_est_ISM_r;
+  double sig = 0.1;
+  double z_mes = 2;
+
   point3d sensorOrigin = pointTfToOctomap(sensorOriginTf);
 
   if (!m_octree->coordToKeyChecked(sensorOrigin, m_updateBBXMin)
@@ -399,6 +410,51 @@ void OctomapServer::insertScan(const tf::Point& sensorOriginTf, const PCLPointCl
       // free cells
       if (m_octree->computeRayKeys(sensorOrigin, point, m_keyRay)){
         free_cells.insert(m_keyRay.begin(), m_keyRay.end());
+
+        m_octree->insertRay(sensorOrigin,point);
+
+        map_est.resize(m_keyRay.size());
+        map_est_ISM_r.resize(m_keyRay.size());
+        ray_depths.resize(m_keyRay.size());
+        //
+        int k = 0;
+        for (octomap::KeyRay::iterator it = m_keyRay.begin(); it != m_keyRay.end(); it++) {
+            // if(tree.search(*it)){
+              map_est[k] = octomap::probability(m_octree->search(*it)->getValue());
+              // if(i==0){
+              //   std::cout<<"before: "<<map_est[k]<<std::endl;
+              // }
+            // }else{
+              // map_est[k] = 0.01;
+            // }
+             // insert freespace measurement
+            ray_depths[k] = (point - sensorOrigin).norm()*float(k)/m_keyRay.size();
+            k++;
+        }
+
+        OctomapServer::RayInverseSensorModel(map_est, ray_depths, map_est_ISM_r, sig, (point - sensorOrigin).norm());
+        k = 0;
+        for (octomap::KeyRay::iterator it = m_keyRay.begin(); it != m_keyRay.end(); it++) {
+					m_octree->setNodeValue(*it, octomap::logodds(float(map_est_ISM_r[k])), false); // insert freespace measurement
+          // if(i==0){
+            // std::cout<<map_est_ISM_r[k]<<std::endl;
+          // }
+
+          // point3d endpoint tree.KeyToCoord(*it);
+          // ColorOcTreeNode* n = color_tree.updateNode(point3d(tree.keyToCoord(*it)), true);
+          // if(k == 0){
+            // n->setColor(255*map_est_ISM_r[k],0,0);
+          // }else{
+            // n->setColor( 255*map_est_ISM_r[k],0, 255*(1-map_est_ISM_r[k]));
+
+          // }
+          if(map_est_ISM_r[k] >= 0.8){
+            m_octree->updateNode(*it,true);
+          }
+          k++;
+            }
+
+
       }
       // occupied endpoint
       OcTreeKey key;
@@ -436,11 +492,11 @@ void OctomapServer::insertScan(const tf::Point& sensorOriginTf, const PCLPointCl
   }
 
   // mark free cells only if not seen occupied in this cloud
-  for(KeySet::iterator it = free_cells.begin(), end=free_cells.end(); it!= end; ++it){
-    if (occupied_cells.find(*it) == occupied_cells.end()){
-      m_octree->updateNode(*it, false);
-    }
-  }
+  // for(KeySet::iterator it = free_cells.begin(), end=free_cells.end(); it!= end; ++it){
+  //   if (m_octree->search(*it)->getValue() > octomap::logodds(float(0.75))){// == occupied_cells.end()){
+  //     m_octree->updateNode(*it, true);
+  //   }
+  // }
 
   // now mark all occupied cells:
   for (KeySet::iterator it = occupied_cells.begin(), end=occupied_cells.end(); it!= end; it++) {
@@ -477,6 +533,71 @@ void OctomapServer::insertScan(const tf::Point& sensorOriginTf, const PCLPointCl
 
 }
 
+
+double OctomapServer::ForwardSensorModel(double x, double mu, double sig, double mu_max){
+    double p;
+
+    if(x >= mu_max){
+        if(mu >= mu_max){
+            p = 1.0;
+            printf("This never happens, does it?\n");
+        }
+        else
+            p = 0.0;
+    }
+    else
+        p = 1/(sig*sqrt2pi)*exp(-(x-mu)*(x-mu)/(2*sig*sig));;
+
+    return p;
+}
+
+void OctomapServer::RayInverseSensorModel(std::vector<double>& map_est, std::vector<double>& ray_depths, std::vector<double>& map_est_ISM_r, double sig, double z){
+    int n_r = map_est.size();// & INT_MAX;
+//    printf("Inside RISM: n_r = %d\n", n_r);
+    double P_rplus[n_r+1];
+    double notP = 1.0;
+    int k;
+    for(k = 0; k < n_r; k++){
+        P_rplus[k] = notP*map_est[k];
+        notP *= (1-map_est[k]);
+    }
+    P_rplus[n_r] = notP;
+
+
+
+
+    // Obtain unnormalized probabilities and the normalizer
+    double tildeP[n_r], a_temp, inv_eta;
+    inv_eta = 0.0;
+    for(k = 0; k < n_r; k++){
+        a_temp = P_rplus[k]*OctomapServer::ForwardSensorModel(z, ray_depths[k], sig, 4.0);
+        tildeP[k] = map_est[k]*inv_eta+a_temp;
+        inv_eta += a_temp;
+    }
+    inv_eta += P_rplus[n_r]*OctomapServer::ForwardSensorModel(z, ray_depths[n_r], sig, 4.0);
+
+    // Make sure 'inv_eta' is above a minimum threshold and normalize probabilities
+//    double min_val_inv_eta = 0.000000000001;
+    double P_occ_eval;
+    if(inv_eta <= 0.0){
+//        printf("Error: inverse eta of ray inverse sensor model\nis %e.\n", inv_eta);
+        for(k = 0; k < n_r; k++){
+            map_est_ISM_r[k] = map_est[k];
+        }
+    }
+    else{
+        for(k = 0; k < n_r; k++){
+            P_occ_eval = tildeP[k]/inv_eta;
+            // Truncate probabilities close to 0 and 1
+            if(     P_occ_eval < P_occ_min)
+                map_est_ISM_r[k] = P_occ_min;
+            else if(P_occ_eval > P_occ_max)
+                map_est_ISM_r[k] = P_occ_max;
+            else
+                map_est_ISM_r[k] = P_occ_eval;
+        }
+    }
+}
 
 
 void OctomapServer::publishAll(const ros::Time& rostime){
@@ -1272,6 +1393,3 @@ std_msgs::ColorRGBA OctomapServer::heightMapColor(double h) {
   return color;
 }
 }
-
-
-

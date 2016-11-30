@@ -135,6 +135,10 @@ protected:
   */
   virtual void insertScan(const tf::Point& sensorOrigin, const PCLPointCloud& ground, const PCLPointCloud& nonground);
 
+  double ForwardSensorModel(double x, double mu, double sig, double mu_max);
+  void RayInverseSensorModel(std::vector<double>& map_est, std::vector<double>& ray_depths, std::vector<double>& map_est_ISM_r, double sig, double z);
+
+
   /// label the input cloud "pc" into ground and nonground. Should be in the robot's fixed frame (not world!)
   void filterGroundPlane(const PCLPointCloud& pc, PCLPointCloud& ground, PCLPointCloud& nonground) const;
 
