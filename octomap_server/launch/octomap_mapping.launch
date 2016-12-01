@@ -8,8 +8,9 @@
 -->
 <launch>
 	<node pkg="octomap_server" type="octomap_server_node" name="octomap_server">
-		<param name="resolution" value="0.1" />
-
+		<param name="resolution" value="0.075" />
+		<param name="occupancy_min_z" value="0.08"/>
+		<param name="occupancy_max_z" value="0.12"/>
 		<!-- fixed map frame (set to 'map' if SLAM or localization running!) -->
 		<param name="frame_id" type="string" value="/world" />
 		<param name="base_frame_id" type="string" value="/camera_depth_frame" />

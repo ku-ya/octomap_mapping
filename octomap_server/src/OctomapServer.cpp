@@ -107,7 +107,7 @@ OctomapServer::OctomapServer(ros::NodeHandle private_nh_)
 
   private_nh.param("resolution", m_res, m_res);
   private_nh.param("sensor_model/hit", probHit, 0.7);
-  private_nh.param("sensor_model/miss", probMiss, 0.4);
+  private_nh.param("sensor_model/miss", probMiss, 0.5);
   private_nh.param("sensor_model/min", thresMin, 0.12);
   private_nh.param("sensor_model/max", thresMax, 0.97);
   private_nh.param("compress_map", m_compressMap, m_compressMap);
@@ -436,6 +436,7 @@ PCLPointCloud& nonground){
         k = 0;
         for (octomap::KeyRay::iterator it = m_keyRay.begin(); it != m_keyRay.end(); it++) {
 					m_octree->setNodeValue(*it, octomap::logodds(float(map_est_ISM_r[k])), false); // insert freespace measurement
+          // m_octree->setNodeValue(*it, octomap::logodds(float(0.99)), false);
           // if(i==0){
             // std::cout<<map_est_ISM_r[k]<<std::endl;
           // }
@@ -448,9 +449,9 @@ PCLPointCloud& nonground){
             // n->setColor( 255*map_est_ISM_r[k],0, 255*(1-map_est_ISM_r[k]));
 
           // }
-          if(map_est_ISM_r[k] >= 0.8){
-            m_octree->updateNode(*it,true);
-          }
+          // if(map_est_ISM_r[k] >= m_octree->getClampingThresMax()){
+            // m_octree->updateNode(*it,true);
+          // }
           k++;
             }
 
@@ -492,11 +493,11 @@ PCLPointCloud& nonground){
   }
 
   // mark free cells only if not seen occupied in this cloud
-  // for(KeySet::iterator it = free_cells.begin(), end=free_cells.end(); it!= end; ++it){
-  //   if (m_octree->search(*it)->getValue() > octomap::logodds(float(0.75))){// == occupied_cells.end()){
-  //     m_octree->updateNode(*it, true);
-  //   }
-  // }
+  for(KeySet::iterator it = free_cells.begin(), end=free_cells.end(); it!= end; ++it){
+    if (it == occupied_cells.end()){
+      m_octree->updateNode(*it, true);
+    }
+  }
 
   // now mark all occupied cells:
   for (KeySet::iterator it = occupied_cells.begin(), end=occupied_cells.end(); it!= end; it++) {
