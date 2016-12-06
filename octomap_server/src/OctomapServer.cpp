@@ -28,13 +28,21 @@
  */
 
 #include <octomap_server/OctomapServer.h>
+#include <grid_map_core/GridMap.hpp>
+#include <grid_map_ros/grid_map_ros.hpp>
+
 
 using namespace octomap;
 using octomap_msgs::Octomap;
+using namespace grid_map;
 
 #define sqrt2pi 2.506628274631
 #define P_occ_min 0.0000000001
 #define P_occ_max 0.9999999999
+
+GridMap map({"EISM3D"});
+grid_map_msgs::GridMap message;
+
 
 bool is_equal (double a, double b, double epsilon = 1.0e-7)
 {
@@ -189,6 +197,9 @@ OctomapServer::OctomapServer(ros::NodeHandle private_nh_)
   dynamic_reconfigure::Server<OctomapServerConfig>::CallbackType f;
   f = boost::bind(&OctomapServer::reconfigureCallback, this, _1, _2);
   m_reconfigureServer.setCallback(f);
+
+  // publish_3dgrid = m_nh.advertise<grid_map_msgs::GridMap>("grid_map3d", 100, true);
+
 }
 
 OctomapServer::~OctomapServer(){
@@ -359,6 +370,17 @@ void OctomapServer::insertCloudCallback(const sensor_msgs::PointCloud2::ConstPtr
 
 void OctomapServer::insertScan(const tf::Point& sensorOriginTf, const PCLPointCloud& ground, const
 PCLPointCloud& nonground){
+
+  // define universal grid map
+  map.setGeometry(Length(13.1, 8.1), 0.1, Position(3.5, 0));
+  map.setFrameId("world");
+
+  ROS_INFO("Created map with size %f x %f m (%i x %i cells).\n The center of the map is located at (%f, %f) in the %s frame.",
+    map.getLength().x(), map.getLength().y(),
+    map.getSize()(0), map.getSize()(1),
+    map.getPosition().x(), map.getPosition().y(), map.getFrameId().c_str());
+
+
   std::vector<double> map_est;
   std::vector<double> ray_depths;
   std::vector<double> map_est_ISM_r;
@@ -530,6 +552,12 @@ PCLPointCloud& nonground){
 
   if (m_compressMap)
     m_octree->prune();
+
+
+    map.setTimestamp(ros::Time::now().toSec());
+
+    GridMapRosConverter::toMessage(map, message);
+    // publish_3dgrid.publish(message);
 
 
 }
@@ -922,8 +950,10 @@ void OctomapServer::publishBinaryOctoMap(const ros::Time& rostime) const{
 
   if (octomap_msgs::binaryMapToMsg(*m_octree, map))
     m_binaryMapPub.publish(map);
+    // publish_3dgrid.publish(grid_map);
   else
     ROS_ERROR("Error serializing OctoMap");
+
 }
 
 void OctomapServer::publishFullOctoMap(const ros::Time& rostime) const{
