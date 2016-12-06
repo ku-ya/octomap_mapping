@@ -375,17 +375,17 @@ PCLPointCloud& nonground){
   map.setGeometry(Length(13.1, 8.1), 0.1, Position(3.5, 0));
   map.setFrameId("world");
 
-  ROS_INFO("Created map with size %f x %f m (%i x %i cells).\n The center of the map is located at (%f, %f) in the %s frame.",
-    map.getLength().x(), map.getLength().y(),
-    map.getSize()(0), map.getSize()(1),
-    map.getPosition().x(), map.getPosition().y(), map.getFrameId().c_str());
+  // ROS_INFO("Created map with size %f x %f m (%i x %i cells).\n The center of the map is located at (%f, %f) in the %s frame.",
+  //   map.getLength().x(), map.getLength().y(),
+  //   map.getSize()(0), map.getSize()(1),
+  //   map.getPosition().x(), map.getPosition().y(), map.getFrameId().c_str());
 
 
   std::vector<double> map_est;
   std::vector<double> ray_depths;
   std::vector<double> map_est_ISM_r;
   double sig = 0.1;
-  double z_mes = 2;
+
 
   point3d sensorOrigin = pointTfToOctomap(sensorOriginTf);
 
@@ -450,14 +450,25 @@ PCLPointCloud& nonground){
               // map_est[k] = 0.01;
             // }
              // insert freespace measurement
-            ray_depths[k] = (point - sensorOrigin).norm()*float(k)/m_keyRay.size();
+            ray_depths[k] = (point - sensorOrigin).norm()*double(k)/(m_keyRay.size());
             k++;
         }
 
         OctomapServer::RayInverseSensorModel(map_est, ray_depths, map_est_ISM_r, sig, (point - sensorOrigin).norm());
+
+        // std::cout<<map_est_ISM_r[m_keyRay.size()]<<std::endl;
         k = 0;
         for (octomap::KeyRay::iterator it = m_keyRay.begin(); it != m_keyRay.end(); it++) {
-					m_octree->setNodeValue(*it, octomap::logodds(float(map_est_ISM_r[k])), false); // insert freespace measurement
+					// m_octree->setNodeValue(*it, octomap::logodds(float(map_est_ISM_r[k])), false); // insert freespace measurement
+          if(!std::isnan(map_est_ISM_r[k])){
+           m_octree->setNodeValue(*it, octomap::logodds(float(map_est_ISM_r[k])), false);
+
+
+          if(map_est_ISM_r[k] >= m_octree->getClampingThresMax()){
+            occupied_cells.insert(*it);
+            // m_octree->updateNode(*it,true);
+          }
+         }
           // m_octree->setNodeValue(*it, octomap::logodds(float(0.99)), false);
           // if(i==0){
             // std::cout<<map_est_ISM_r[k]<<std::endl;
@@ -471,9 +482,10 @@ PCLPointCloud& nonground){
             // n->setColor( 255*map_est_ISM_r[k],0, 255*(1-map_est_ISM_r[k]));
 
           // }
-          // if(map_est_ISM_r[k] >= m_octree->getClampingThresMax()){
+          if(map_est_ISM_r[k] >= m_octree->getClampingThresMax()){
+            occupied_cells.insert(*it);
             // m_octree->updateNode(*it,true);
-          // }
+          }
           k++;
             }
 
@@ -515,16 +527,16 @@ PCLPointCloud& nonground){
   }
 
   // mark free cells only if not seen occupied in this cloud
-  for(KeySet::iterator it = free_cells.begin(), end=free_cells.end(); it!= end; ++it){
-    if (it == occupied_cells.end()){
-      m_octree->updateNode(*it, true);
-    }
-  }
-
-  // now mark all occupied cells:
-  for (KeySet::iterator it = occupied_cells.begin(), end=occupied_cells.end(); it!= end; it++) {
-    m_octree->updateNode(*it, true);
-  }
+  // for(KeySet::iterator it = free_cells.begin(), end=free_cells.end(); it!= end; ++it){
+  //   if (it == occupied_cells.end()){
+  //     m_octree->updateNode(*it, true);
+  //   }
+  // }
+  //
+  // // now mark all occupied cells:
+  // for (KeySet::iterator it = occupied_cells.begin(), end=occupied_cells.end(); it!= end; it++) {
+  //   m_octree->updateNode(*it, true);
+  // }
 
   // TODO: eval lazy+updateInner vs. proper insertion
   // non-lazy by default (updateInnerOccupancy() too slow for large maps)
