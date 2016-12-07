@@ -384,7 +384,7 @@ PCLPointCloud& nonground){
   std::vector<double> map_est;
   std::vector<double> ray_depths;
   std::vector<double> map_est_ISM_r;
-  double sig = 0.1;
+  double sig = 0.08;
 
 
   point3d sensorOrigin = pointTfToOctomap(sensorOriginTf);
@@ -408,7 +408,7 @@ PCLPointCloud& nonground){
     if ((m_maxRange > 0.0) && ((point - sensorOrigin).norm() > m_maxRange) ) {
       point = sensorOrigin + (point - sensorOrigin).normalized() * m_maxRange;
     }
-
+    
     // only clear space (ground points)
     if (m_octree->computeRayKeys(sensorOrigin, point, m_keyRay)){
       free_cells.insert(m_keyRay.begin(), m_keyRay.end());
