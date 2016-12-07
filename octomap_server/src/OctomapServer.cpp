@@ -408,7 +408,7 @@ PCLPointCloud& nonground){
     if ((m_maxRange > 0.0) && ((point - sensorOrigin).norm() > m_maxRange) ) {
       point = sensorOrigin + (point - sensorOrigin).normalized() * m_maxRange;
     }
-    
+
     // only clear space (ground points)
     if (m_octree->computeRayKeys(sensorOrigin, point, m_keyRay)){
       free_cells.insert(m_keyRay.begin(), m_keyRay.end());
@@ -424,16 +424,21 @@ PCLPointCloud& nonground){
   }
 
   // all other points: free on ray, occupied on endpoint:
+  point3d temp;
+
   for (PCLPointCloud::const_iterator it = nonground.begin(); it != nonground.end(); ++it){
     point3d point(it->x, it->y, it->z);
     // maxrange check
     if ((m_maxRange < 0.0) || ((point - sensorOrigin).norm() <= m_maxRange) ) {
 
+
+      temp = sensorOrigin + (point - sensorOrigin).normalized() * (point - sensorOrigin).norm() * 1.0;
+
       // free cells
-      if (m_octree->computeRayKeys(sensorOrigin, point, m_keyRay)){
+      if (m_octree->computeRayKeys(sensorOrigin, temp, m_keyRay)){
         free_cells.insert(m_keyRay.begin(), m_keyRay.end());
 
-        m_octree->insertRay(sensorOrigin,point);
+        m_octree->insertRay(sensorOrigin,temp);
 
         map_est.resize(m_keyRay.size());
         map_est_ISM_r.resize(m_keyRay.size());
@@ -443,18 +448,19 @@ PCLPointCloud& nonground){
         for (octomap::KeyRay::iterator it = m_keyRay.begin(); it != m_keyRay.end(); it++) {
             // if(tree.search(*it)){
               map_est[k] = octomap::probability(m_octree->search(*it)->getValue());
-              // if(i==0){
-              //   std::cout<<"before: "<<map_est[k]<<std::endl;
-              // }
-            // }else{
-              // map_est[k] = 0.01;
-            // }
+
              // insert freespace measurement
-            ray_depths[k] = (point - sensorOrigin).norm()*double(k)/(m_keyRay.size());
+            ray_depths[k] = (temp - sensorOrigin).norm()*double(k)/(m_keyRay.size());
             k++;
         }
 
         OctomapServer::RayInverseSensorModel(map_est, ray_depths, map_est_ISM_r, sig, (point - sensorOrigin).norm());
+        // for(k=0;k<m_keyRay.size();k++){
+        //   std::cout<< map_est_ISM_r[k] << " , ";
+        //
+        // }
+        // std::cout<<std::endl;
+
 
         // std::cout<<map_est_ISM_r[m_keyRay.size()]<<std::endl;
         k = 0;
@@ -462,13 +468,11 @@ PCLPointCloud& nonground){
 					// m_octree->setNodeValue(*it, octomap::logodds(float(map_est_ISM_r[k])), false); // insert freespace measurement
           if(!std::isnan(map_est_ISM_r[k])){
            m_octree->setNodeValue(*it, octomap::logodds(float(map_est_ISM_r[k])), false);
-
-
-          if(map_est_ISM_r[k] >= m_octree->getClampingThresMax()){
-            occupied_cells.insert(*it);
-            // m_octree->updateNode(*it,true);
+            if(map_est_ISM_r[k] >= m_octree->getClampingThresMax()){
+              occupied_cells.insert(*it);
+              // m_octree->updateNode(*it,true);
+            }
           }
-         }
           // m_octree->setNodeValue(*it, octomap::logodds(float(0.99)), false);
           // if(i==0){
             // std::cout<<map_est_ISM_r[k]<<std::endl;
@@ -482,47 +486,55 @@ PCLPointCloud& nonground){
             // n->setColor( 255*map_est_ISM_r[k],0, 255*(1-map_est_ISM_r[k]));
 
           // }
-          if(map_est_ISM_r[k] >= m_octree->getClampingThresMax()){
-            occupied_cells.insert(*it);
+          // if(map_est_ISM_r[k] >= m_octree->getClampingThresMax()){
+          //   occupied_cells.insert(*it);
             // m_octree->updateNode(*it,true);
-          }
+        // }
           k++;
-            }
+        }
+
+        // for (octomap::KeyRay::iterator it = m_keyRay.begin(); it != m_keyRay.end(); it++) {
+        //     if(m_octree->search(*it)){
+        //       std::cout<< octomap::probability(m_octree->search(*it)->getValue()) << " , ";
+        //     }
+        //     }
+        //     std::cout<<std::endl;
+
 
 
       }
       // occupied endpoint
-      OcTreeKey key;
-      if (m_octree->coordToKeyChecked(point, key)){
-        occupied_cells.insert(key);
-
-        updateMinKey(key, m_updateBBXMin);
-        updateMaxKey(key, m_updateBBXMax);
-
-#ifdef COLOR_OCTOMAP_SERVER // NB: Only read and interpret color if it's an occupied node
-        const int rgb = *reinterpret_cast<const int*>(&(it->rgb)); // TODO: there are other ways to encode color than this one
-        colors[0] = ((rgb >> 16) & 0xff);
-        colors[1] = ((rgb >> 8) & 0xff);
-        colors[2] = (rgb & 0xff);
-        m_octree->averageNodeColor(it->x, it->y, it->z, colors[0], colors[1], colors[2]);
-#endif
-      }
+//       OcTreeKey key;
+//       if (m_octree->coordToKeyChecked(point, key)){
+//         occupied_cells.insert(key);
+//
+//         updateMinKey(key, m_updateBBXMin);
+//         updateMaxKey(key, m_updateBBXMax);
+//
+// #ifdef COLOR_OCTOMAP_SERVER // NB: Only read and interpret color if it's an occupied node
+//         const int rgb = *reinterpret_cast<const int*>(&(it->rgb)); // TODO: there are other ways to encode color than this one
+//         colors[0] = ((rgb >> 16) & 0xff);
+//         colors[1] = ((rgb >> 8) & 0xff);
+//         colors[2] = (rgb & 0xff);
+//         m_octree->averageNodeColor(it->x, it->y, it->z, colors[0], colors[1], colors[2]);
+// #endif
+//       }
     } else {// ray longer than maxrange:;
-      point3d new_end = sensorOrigin + (point - sensorOrigin).normalized() * m_maxRange;
-      if (m_octree->computeRayKeys(sensorOrigin, new_end, m_keyRay)){
-        free_cells.insert(m_keyRay.begin(), m_keyRay.end());
-
-        octomap::OcTreeKey endKey;
-        if (m_octree->coordToKeyChecked(new_end, endKey)){
-          free_cells.insert(endKey);
-          updateMinKey(endKey, m_updateBBXMin);
-          updateMaxKey(endKey, m_updateBBXMax);
-        } else{
-          ROS_ERROR_STREAM("Could not generate Key for endpoint "<<new_end);
-        }
-
-
-      }
+      // point3d new_end = sensorOrigin + (point - sensorOrigin).normalized() * m_maxRange;
+      // if (m_octree->computeRayKeys(sensorOrigin, new_end, m_keyRay)){
+      //   free_cells.insert(m_keyRay.begin(), m_keyRay.end());
+      //
+      //   octomap::OcTreeKey endKey;
+      //   if (m_octree->coordToKeyChecked(new_end, endKey)){
+      //     free_cells.insert(endKey);
+      //     updateMinKey(endKey, m_updateBBXMin);
+      //     updateMaxKey(endKey, m_updateBBXMax);
+      //   } else{
+      //     ROS_ERROR_STREAM("Could not generate Key for endpoint "<<new_end);
+      //   }
+      //
+      //
+      // }
     }
   }
 
@@ -562,8 +574,8 @@ PCLPointCloud& nonground){
   ROS_DEBUG_STREAM("Updated area bounding box: "<< minPt << " - "<<maxPt);
   ROS_DEBUG_STREAM("Bounding box keys (after): " << m_updateBBXMin[0] << " " <<m_updateBBXMin[1] << " " << m_updateBBXMin[2] << " / " <<m_updateBBXMax[0] << " "<<m_updateBBXMax[1] << " "<< m_updateBBXMax[2]);
 
-  if (m_compressMap)
-    m_octree->prune();
+  // if (m_compressMap)
+  //   m_octree->prune();
 
 
     map.setTimestamp(ros::Time::now().toSec());
@@ -1241,26 +1253,27 @@ void OctomapServer::update2DMap(const OcTreeT::iterator& it, bool occupied){
 
   if (it.getDepth() == m_maxTreeDepth){
     unsigned idx = mapIdx(it.getKey());
-    if (occupied)
-      m_gridmap.data[mapIdx(it.getKey())] = 100;
-    else if (m_gridmap.data[idx] == -1){
-      m_gridmap.data[idx] = 0;
+    // m_gridmap.data[mapIdx(it.getKey())] = 100.0 * octomap::probability(m_octree->search(it.getKey())->getValue());
+    if (occupied){
+      m_gridmap.data[mapIdx(it.getKey())] = 100.0 * octomap::probability(m_octree->search(it.getKey())->getValue());
+    }else if (m_gridmap.data[idx] == -1){
+      m_gridmap.data[idx] = 0.5;
     }
 
   } else{
-    int intSize = 1 << (m_maxTreeDepth - it.getDepth());
-    octomap::OcTreeKey minKey=it.getIndexKey();
-    for(int dx=0; dx < intSize; dx++){
-      int i = (minKey[0]+dx - m_paddedMinKey[0])/m_multires2DScale;
-      for(int dy=0; dy < intSize; dy++){
-        unsigned idx = mapIdx(i, (minKey[1]+dy - m_paddedMinKey[1])/m_multires2DScale);
-        if (occupied)
-          m_gridmap.data[idx] = 100;
-        else if (m_gridmap.data[idx] == -1){
-          m_gridmap.data[idx] = 0;
-        }
-      }
-    }
+    // int intSize = 1 << (m_maxTreeDepth - it.getDepth());
+    // octomap::OcTreeKey minKey=it.getIndexKey();
+    // for(int dx=0; dx < intSize; dx++){
+    //   int i = (minKey[0]+dx - m_paddedMinKey[0])/m_multires2DScale;
+    //   for(int dy=0; dy < intSize; dy++){
+    //     unsigned idx = mapIdx(i, (minKey[1]+dy - m_paddedMinKey[1])/m_multires2DScale);
+    //     if (occupied)
+    //       m_gridmap.data[idx] = 100.0 * octomap::probability(m_octree->search(it.getKey())->getValue());
+    //     else if (m_gridmap.data[idx] == -1){
+    //       m_gridmap.data[idx] = 0.5;
+    //     }
+    //   }
+    // }
   }
 
 
