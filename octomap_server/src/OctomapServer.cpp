@@ -408,7 +408,7 @@ PCLPointCloud& nonground){
     if ((m_maxRange > 0.0) && ((point - sensorOrigin).norm() > m_maxRange) ) {
       point = sensorOrigin + (point - sensorOrigin).normalized() * m_maxRange;
     }
-    
+
     // only clear space (ground points)
     if (m_octree->computeRayKeys(sensorOrigin, point, m_keyRay)){
       free_cells.insert(m_keyRay.begin(), m_keyRay.end());
@@ -523,6 +523,15 @@ PCLPointCloud& nonground){
 
 
       }
+
+      // max range probabilities
+      for (octomap::KeyRay::iterator it = m_keyRay.begin(); it != m_keyRay.end(); it++) {
+        // m_octree->setNodeValue(*it, octomap::logodds(float(map_est_ISM_r[k])), false); // insert freespace measurement
+         m_octree->setNodeValue(*it, octomap::logodds(float(0.2)), false);
+       }
+
+
+
     }
   }
 
