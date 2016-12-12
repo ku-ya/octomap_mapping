@@ -510,6 +510,7 @@ PCLPointCloud& nonground){
       OcTreeKey key;
       if (m_octree->coordToKeyChecked(point, key)){
         occupied_cells.insert(key);
+        m_octree->setNodeValue(key, 0, false);
 
         updateMinKey(key, m_updateBBXMin);
         updateMaxKey(key, m_updateBBXMax);
