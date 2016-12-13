@@ -424,16 +424,19 @@ PCLPointCloud& nonground){
   }
 
   // all other points: free on ray, occupied on endpoint:
+  point3d temp;
   for (PCLPointCloud::const_iterator it = nonground.begin(); it != nonground.end(); ++it){
     point3d point(it->x, it->y, it->z);
     // maxrange check
     if ((m_maxRange < 0.0) || ((point - sensorOrigin).norm() <= m_maxRange) ) {
 
       // free cells
-      if (m_octree->computeRayKeys(sensorOrigin, point, m_keyRay)){
+      temp = sensorOrigin + (point - sensorOrigin).normalized()*(point - sensorOrigin).norm()*1.2;
+
+      if (m_octree->computeRayKeys(sensorOrigin, temp, m_keyRay)){
         free_cells.insert(m_keyRay.begin(), m_keyRay.end());
 
-        m_octree->insertRay(sensorOrigin,point);
+        m_octree->insertRay(sensorOrigin,temp);
 
         map_est.resize(m_keyRay.size());
         map_est_ISM_r.resize(m_keyRay.size());
@@ -450,11 +453,17 @@ PCLPointCloud& nonground){
               // map_est[k] = 0.01;
             // }
              // insert freespace measurement
-            ray_depths[k] = (point - sensorOrigin).norm()*double(k)/(m_keyRay.size());
+            ray_depths[k] = (temp - sensorOrigin).norm()*double(k)/(m_keyRay.size());
             k++;
         }
 
         OctomapServer::RayInverseSensorModel(map_est, ray_depths, map_est_ISM_r, sig, (point - sensorOrigin).norm());
+
+        // for(k = 0;k<m_keyRay.size();k++){
+        //   std::cout<<map_est_ISM_r[k]<<", ";
+        //
+        // }
+        // std::cout<<std::endl;
 
         // std::cout<<map_est_ISM_r[m_keyRay.size()]<<std::endl;
         k = 0;
@@ -482,10 +491,10 @@ PCLPointCloud& nonground){
             // n->setColor( 255*map_est_ISM_r[k],0, 255*(1-map_est_ISM_r[k]));
 
           // }
-          if(map_est_ISM_r[k] >= m_octree->getClampingThresMax()){
-            occupied_cells.insert(*it);
-            // m_octree->updateNode(*it,true);
-          }
+          // if(map_est_ISM_r[k] >= m_octree->getClampingThresMax()){
+          //   occupied_cells.insert(*it);
+          //   // m_octree->updateNode(*it,true);
+          // }
           k++;
             }
 
@@ -493,8 +502,9 @@ PCLPointCloud& nonground){
       }
       // occupied endpoint
       OcTreeKey key;
-      if (m_octree->coordToKeyChecked(point, key)){
+      if (m_octree->coordToKeyChecked(temp, key)){
         occupied_cells.insert(key);
+        m_octree->setNodeValue(key, float(0), true);
 
         updateMinKey(key, m_updateBBXMin);
         updateMaxKey(key, m_updateBBXMax);
@@ -1251,9 +1261,11 @@ void OctomapServer::update2DMap(const OcTreeT::iterator& it, bool occupied){
   if (it.getDepth() == m_maxTreeDepth){
     unsigned idx = mapIdx(it.getKey());
     if (occupied)
-      m_gridmap.data[mapIdx(it.getKey())] = 100;
+      // m_gridmap.data[mapIdx(it.getKey())] = 100;
+      m_gridmap.data[mapIdx(it.getKey())] = int(100.0 * octomap::probability(m_octree->search(it.getKey())->getValue()));
     else if (m_gridmap.data[idx] == -1){
-      m_gridmap.data[idx] = 0;
+      m_gridmap.data[mapIdx(it.getKey())] = int(100.0 * octomap::probability(m_octree->search(it.getKey())->getValue()));
+      // m_gridmap.data[idx] = 0;
     }
 
   } else{
@@ -1266,7 +1278,7 @@ void OctomapServer::update2DMap(const OcTreeT::iterator& it, bool occupied){
         if (occupied)
           m_gridmap.data[idx] = 100;
         else if (m_gridmap.data[idx] == -1){
-          m_gridmap.data[idx] = 0;
+          // m_gridmap.data[idx] = 0;
         }
       }
     }
