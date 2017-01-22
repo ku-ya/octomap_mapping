@@ -456,9 +456,9 @@ PCLPointCloud& nonground){
             ray_depths[k] = (temp - sensorOrigin).norm()*double(k)/(m_keyRay.size());
             k++;
         }
-
+        ros::Time begin = ros::Time::now();
         OctomapServer::RayInverseSensorModel(map_est, ray_depths, map_est_ISM_r, sig, (point - sensorOrigin).norm());
-
+        std::cout<<ros::Time::now() - begin<<std::endl;
         // for(k = 0;k<m_keyRay.size();k++){
         //   std::cout<<map_est_ISM_r[k]<<", ";
         //
