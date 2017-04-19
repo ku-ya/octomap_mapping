@@ -59,8 +59,8 @@ OctomapServer::OctomapServer(ros::NodeHandle private_nh_)
   m_octree(NULL),
   m_maxRange(-1.0),
   m_worldFrameId("/map"), m_baseFrameId("base_footprint"),
-  m_useHeightMap(true),
-  m_useColoredMap(false),
+  m_useHeightMap(false),
+  m_useColoredMap(true),
   m_colorFactor(0.8),
   m_latchedTopics(true),
   m_publishFreeSpace(false),
@@ -746,7 +746,9 @@ void OctomapServer::publishAll(const ros::Time& rostime){
             m_octree->getMetricMin(minX, minY, minZ);
             m_octree->getMetricMax(maxX, maxY, maxZ);
 
+
             double h = (1.0 - std::min(std::max((cubeCenter.z-minZ)/ (maxZ - minZ), 0.0), 1.0)) *m_colorFactor;
+            // h = octomap::probability(it.getValue());
             occupiedNodesVis.markers[idx].colors.push_back(heightMapColor(h));
           }
 
